@@ -4,6 +4,7 @@
 #include "Arduino.h"
 #include "SPI.h"
 
+
 // Registers	Table 8-7
 #define  R_NOP        0x00
 #define  R_DEVICEID   0x01
@@ -49,13 +50,15 @@
 #define SDO_EN(x)     (x << 2)
 #define FSDO(x)       (x << 1)
 
-// read mask
+// DAC READ MASK
 #define RREG 0xC0
 
-// NOP
+// NOP MACRO	62.5ns on 16MHz
 #define NOP __asm__("nop\n\t")
 
-class DAC81416 {
+
+class DAC81416 {   
+  
     private:
         SPIClass *_spi;
         SPISettings _spi_settings;
@@ -67,23 +70,23 @@ class DAC81416 {
 
         inline void cs_on();
         inline void cs_off();
-        
-        // TODO: datasheet says tcsh = SCLK falling edge 
-        // to SYNC rising edge time = 5 ns (min)
-        // handle with ASM nop? 
+                
+        // Might not need NOP, just calling the SPI function is probably delay enough
         inline void tcsh_delay() {
             //delayMicroseconds(1);
-			NOP;
+			      NOP;
         }
 
+        // SPI functions
         void write_reg(uint8_t reg, uint16_t wdata);
         uint16_t read_reg(uint8_t reg);
 
         // DACRANGE is a write only register
-        // Have to keep track of individual channels manually
+        // Have to keep track of individual channel ranges manually
         uint16_t KNOWN_DACRANGE[4] = {0,0,0,0};
 
     public:
+    
         // Output Voltage ENUM
         enum ChannelRange {
 				   U_5  = 0b0000,   // Unipolar  0V to 5V
@@ -95,44 +98,70 @@ class DAC81416 {
                    B_20 = 0b1100,   // Bipolar   -20V to +20V
 				   B_2V5 = 0b1110}; // Bipolar   -2.5V to +2.5V
 
-		// SYNC uses the LDAC to trigger
+		// 2 Types of temporal operation
+		// SYNC means that channel will use LDAC LOW to trigger
+		// Call LDAC pin LOW with sync()
         enum SyncMode {ASYNC, SYNC};
+		
+		// Pulls LDAC Low to Sync for SYNC SyncMode pins
+		void sync ();
 
+        // LDAC Sync Config
+        void set_ch_LDAC_enabled(int ch, bool state);
+
+        // LDAC Sync Config
+        bool get_ch_LDAC_enabled(int ch);
+
+        // Default CONFIG
 		uint16_t SPICONFIG = TEMPALM_EN(1) | DACBUSY_EN(0) | CRCALM_EN(1) | (0 << 8) | (1 << 7) | SFTTOG_EN(0) | DEV_PWDWN(0) | CRC_EN(0) | STR_EN(0) | SDO_EN(1) | FSDO(1) | 0 << 1;
 
-        // constructor
+        // DAC Constructor
         DAC81416(int cspin, int rstpin = -1, int ldacpin = -1,
                  SPIClass *spi = &SPI, uint32_t spi_clock_hz=8000000);
 
+        // Init function to setup the DAC
         int init(ChannelRange default_channelrange);
-        
-        // Hard-Reset
-        
-        // DAC power up/down
-        // TODO: set/clear DAC_PWDWN bit in SPICONFIG reg
 
-        // DAC channel powerdown
+        // Set DAC channel powerdown
         void set_ch_enabled(int ch, bool state); // true/false = power ON/OFF
+
+        // Get DAC channel power state
         bool get_ch_enabled(int ch);
 
-        // Reference
+        // Set Enable Internal 2.5V Reference
         void set_int_reference(bool state);
-        int get_int_reference();
-        
-        // Status
 
-        // set/get range of a channel
+        // Get Enable Internal 2.5V Reference
+        int get_int_reference();
+                
+        // Set channel range
         void set_range(int ch, ChannelRange range);
+
+        // Get channel range
         int get_range(int ch);
 
-        // write to a ch
+        // Write 16-bit output value
         void set_out(int ch, uint16_t val);
 
-        // sync 
+        // Set Sync 
         void set_sync(int ch, SyncMode);
-		
-		bool is_alive();
-		int get_deviceid();
-		
-		float get_temp(int pin, float ref);
+
+        // Check Alive using R_DEVICEID
+    	bool is_alive();
+
+        // Reset
+        void reset();
+
+        // Device ID
+    	int get_deviceid();
+
+        // Version ID
+        int get_versionid();
+
+        // Status
+        int get_status();
+    	
+		// Get temperature
+    	float get_temp(int pin, float ref);
+
 };

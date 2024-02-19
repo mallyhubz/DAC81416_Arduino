@@ -20,7 +20,7 @@ configured in synchronous mode are updated simultaneously. Connect to VIO if unu
 // Pin definitions
 #define DAC_CS 10
 #define DAC_RST 4
-#define DAC_LDAC 4
+#define DAC_LDAC 5
 #define DAC_TEMPOUT A0
 
 #define GPIO_TEMPALARM 8
@@ -140,6 +140,9 @@ void loop() {
     if (read_status & 0b100) {
         Serial.println("CRC ALARM");
     }
+
+    // Use LDAC to Sync
+    dac.sync();
 
     // Set the flag to indicate that the task has been executed
     taskExecuted = false;

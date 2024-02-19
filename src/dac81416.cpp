@@ -1,15 +1,15 @@
 #include "dac81416.h"
 
-// constructor 
+// DAC constructor 
 DAC81416::DAC81416(int cspin, int rstpin, int ldacpin, SPIClass *spi, uint32_t spi_clock_hz) {
     _cs_pin = cspin;
     _spi = spi;
 
     // RESET pin setup
-    if(rstpin != -1) _rst_pin = rstpin;
+    if(rstpin > -1) _rst_pin = rstpin;
     
-    // LDAC operation is not implemented in the lib
-    if(ldacpin != -1) _ldac_pin = ldacpin;
+    // LDAC pin setup
+    if(ldacpin > -1) _ldac_pin = ldacpin;
     
     _spi_settings = SPISettings(spi_clock_hz, MSBFIRST, SPI_MODE0);
 
@@ -19,6 +19,7 @@ DAC81416::DAC81416(int cspin, int rstpin, int ldacpin, SPIClass *spi, uint32_t s
     _spi->begin();
 }
 
+// Chip Select
 inline void DAC81416::cs_on() {
     digitalWrite(_cs_pin, LOW);
 }
@@ -28,6 +29,29 @@ inline void DAC81416::cs_off() {
 }
 
 /*
+
+Table 6-1
+
+Active low synchronization signal. When the LDAC pin is low, the DAC outputs of those channels
+configured in synchronous mode are updated simultaneously. Connect to VIO if unused.
+
+Table 6-8
+
+LDAC low time   VIO 1.7V to 2.7V	40ns
+LDAC low time   VIO 2.7V to 5.5V	20ns
+
+*/
+
+void DAC81416::sync()
+{
+	digitalWrite(_ldac_pin, LOW);
+	NOP;NOP;
+	digitalWrite(_ldac_pin, HIGH);
+}
+
+/*
+  8.6.2  DEVICEID Register
+ 
 	Device ID (MS 14bits)
 	Device ID (MS 14bits)
 	DAC81416: 29Ch
@@ -40,15 +64,23 @@ int DAC81416::get_deviceid()
 	uint16_t deviceID = read_reg(R_DEVICEID);		
 	
 	// DAC81416 will return 29C if it is alive
-	return deviceID >> 2;
+	return deviceID >> 0x02;
+}
+
+int DAC81416::get_versionid()
+{
+  uint16_t deviceV = read_reg(R_DEVICEID);   
+  
+  // DAC81416 will return 2 bits version ID (0 on DAC81416EVM)
+  return deviceV &= 0x02;
 }
 
 bool DAC81416::is_alive()
 {
-	uint16_t deviceID = read_reg(R_DEVICEID);
-	//Serial.print("R_DEVICEID = ");
-	//Serial.println(deviceID, HEX);
-	
+	uint16_t deviceID = read_reg(R_DEVICEID);	
+
+  // DAC (of some type) is alive
+  // Use get_device_id() to check exactly which type
 	if (deviceID == 0xFFFF || deviceID == 0x0000)
 	{
 		return 0;
@@ -60,31 +92,31 @@ bool DAC81416::is_alive()
 }
 
 int DAC81416::init(ChannelRange default_channelrange) {
-    // reset if the reset pin is defined
-    // TODO: if not then issue a soft reset?
+        
     if(_rst_pin!=-1) {
         pinMode(_rst_pin, OUTPUT);
         digitalWrite(_rst_pin, LOW);
         delay(1); 
         digitalWrite(_rst_pin, HIGH); 
         delay(1);
-    } 
+    }
 
-    // set SPICONFIG: DEV_PWDN=0, FSDO=1
-    //uint16_t def = TEMPALM_EN(1) | DACBUSY_EN(0) | CRCALM_EN(1) | DEV_PWDWN(0) | CRC_EN(0) | SDO_EN(1) | FSDO(1) | (0x2 << 6);	
-	write_reg(R_SPICONFIG, 0x0004);
-	delay(1);
+    // Enable SDO
+    write_reg(R_SPICONFIG, 0x0004);
+	  delay(1);
+   
+    // Set SPICONFIG
     write_reg(R_SPICONFIG, SPICONFIG);    
-	delay(1);
-    // reading SPICONFIG back
-    //return (read_reg(R_SPICONFIG) == def ? 0 : -1);
-	
-	for(int i=0; i<=15; i++) 
-	{
-		set_range(i, default_channelrange);	
-	}	
-	return (read_reg(R_SPICONFIG));
+	  delay(1);    
 
+    // Set the default channel RANGES
+  	for(int i=0; i<=15; i++) 
+  	{
+  		set_range(i, default_channelrange);	
+  	}	
+
+    // Used to check if it was set correctly
+  	return (read_reg(R_SPICONFIG));
 }
 
 void DAC81416::write_reg(uint8_t reg, uint16_t wdata) {
@@ -93,7 +125,7 @@ void DAC81416::write_reg(uint8_t reg, uint16_t wdata) {
 
     _spi->beginTransaction(_spi_settings);
     cs_on();
-    //delayMicroseconds(1);
+    NOP;
     _spi->transfer(reg);
     _spi->transfer(msb);
     _spi->transfer(lsb);
@@ -136,13 +168,31 @@ void DAC81416::set_ch_enabled(int ch, bool state) { // true/false = power ON/OFF
     if(state) write_reg(R_DACPWDWN, res &= ~(1 << ch) );
     else write_reg(R_DACPWDWN, res |= (1 << ch) );
 
-    //Serial.print("dacpwdn = "); Serial.println(res, HEX);
 }
 
 // Corrected for channels 0 to 15
 bool DAC81416::get_ch_enabled(int ch) {
 	
     uint16_t res = read_reg(R_DACPWDWN);
+    return !(bool(((res >> ch) & 1)));
+}
+
+
+//************** Set/Get LDAC Enable Status **************//
+// Corrected for channels 0 to 15
+void DAC81416::set_ch_LDAC_enabled(int ch, bool state) { // true/false = power ON/OFF
+    uint16_t res = read_reg(R_SYNCCONFIG);
+    
+    // if state==true, power up the channel
+    if(state) write_reg(R_SYNCCONFIG, res &= ~(1 << ch) );
+    else write_reg(R_SYNCCONFIG, res |= (1 << ch) );
+
+}
+
+// Corrected for channels 0 to 15
+bool DAC81416::get_ch_LDAC_enabled(int ch) {
+  
+    uint16_t res = read_reg(R_SYNCCONFIG);
     return !(bool(((res >> ch) & 1)));
 }
 
@@ -176,7 +226,7 @@ void DAC81416::set_range(int ch, ChannelRange range) {
     KNOWN_DACRANGE[DAC_REGISTER - 0x0A] = write;		
 	
 	// Debug
-	Serial.print("range write to channel "); Serial.print((4*reg)+(ch+1)); Serial.print(" -> "); Serial.println(write, HEX);
+	// Serial.print("range write to channel "); Serial.print((4*reg)+(ch+1)); Serial.print(" -> "); Serial.println(write, HEX);
 	
 	// Write to SPI
     write_reg(DAC_REGISTER, write);
@@ -216,6 +266,7 @@ When set to 1 the corresponding DAC output is set to update in
 response to an LDAC trigger (synchronous mode).
 When cleared to 0 the corresponding DAC output is set to update
 immediately (asynchronous mode).
+
 */
 void DAC81416::set_sync(int ch, SyncMode mode) {
 	
@@ -234,6 +285,46 @@ void DAC81416::set_sync(int ch, SyncMode mode) {
     //Serial.print("sync wrote -> "); Serial.println(read, HEX);
 }
 
+int DAC81416::get_status()
+{
+    // Read R_STATUS register
+    uint16_t read = read_reg(R_STATUS);
+    //uint16_t read = 0x01;
+    read &= 0x07;
+    // Return it as-is
+    return(read);
+}
+
+//*********************** Reset DAC **********************//
+/* 
+Table 6-1 & 8.3.3.2
+
+Active low reset input. Logic low on this pin causes the device to issue a power-on-reset event.
+A device hardware reset event is initiated by a minimum 500 ns logic low on the RESET pin.
+
+*/
+void DAC81416::reset()
+{  
+  digitalWrite(_rst_pin, LOW);
+  delay(1);
+  digitalWrite(_rst_pin, HIGH);
+}
+
+//******************* Temperature Sensor  ******************//
+/* 
+8.3.4.1
+
+The DACx1416 includes an analog temperature monitor with an unbuffered output voltage that is inversely
+proportional to the device junction temperature. The TEMPOUT pin output voltage has a temperature slope of
+–4 mV/°C and a 1.34-V offset as described by Equation.
+
+V_TEMPOUT = (( -4 mV / *C ) * T) + 1.34V
+
+where:
+• T is the device junction temperature in °C.
+• V_TEMPOUT is the temperature monitor output voltage
+
+*/
 float DAC81416::get_temp(int pin, float ref)
 {
    int sensorValue = analogRead(pin);
