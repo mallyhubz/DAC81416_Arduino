@@ -26,11 +26,9 @@ configured in synchronous mode are updated simultaneously. Connect to VIO if unu
 #define GPIO_TEMPALARM 8
 #define DEBUG_FLAG 1
 
-// functions for SYNC output using LDAC and ASYNC output
+// See README for TO DO list
 
-// function for TEMPALARM
-
-// Declare dac. For non-chained-mode, use a CS pin per DAC
+// Declare DAC. For non-chained-mode, use a CS pin per DAC
 DAC81416 dac(DAC_CS, DAC_RST, DAC_LDAC, &SPI, 30000000);
 
 void setup() {  
@@ -111,6 +109,10 @@ const unsigned long interval = 5000;
 unsigned long previousMillis = 0;
 bool taskExecuted = false;
 
+/*
+   MAIN LOOP
+*/
+
 void loop() {
 
   unsigned long currentMillis = millis();
@@ -154,13 +156,5 @@ void loop() {
   dac.set_out(0, 0xFFFF);
   delay(1000);
   */
-  
-  /*
-  if(millis()>10000 && done) {
-    dac.set_ch_enabled(2, false);
-    Serial.println("ch 2 shutdown");
-    for(int i=0; i<4; i++) Serial.printf("ch %d power -> %d\n", i, dac.get_ch_enabled(i));
-    Serial.println();
-    done = false;
-  } */
+
 }

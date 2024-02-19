@@ -7,6 +7,9 @@ A basic BETA library for TI's DAC81416 precision DAC and the associated DAC81416
 I tested the Exmaple(s) with Elegoo (Arduino-like) Uno R3. The code should work for other platforms as well. 
 Please report if something is not working.
 
+**Dev Setup:**
+![alt text](https://github.com/mallyhubz/DAC81416_Arduino/blob/main/dev-setup.jpg?raw=true)
+
 **Limitations:**
 1. BETA versions - some bugs may exist. Please report if you encounter something. 
 2. LDAC pin is not handled by the library.
