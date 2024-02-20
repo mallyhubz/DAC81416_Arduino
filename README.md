@@ -16,12 +16,12 @@ Please report if something is not working.
 
 **Limitations:**
 1. BETA versions - some bugs may exist. Please report if you encounter something. 
-2. LDAC pin is not handled by the library.
+2. CRC Mode was attempted, but not working
 
 **TODO:**
-1. Code cleanup
-2. Soft and Hard Toggles / Differential + Offsets / Streaming / Broadcast
-3. More examples
+1. Code and comment cleanup
+2. Differential + Offsets / Streaming / CRC
+3. Seperate examples
 - Hardware SPI
 - Chained
 5. Make generic for all 3 DAC types (probably have to rename the repo)

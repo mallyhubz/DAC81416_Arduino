@@ -6,6 +6,7 @@
  *   Based on partial implementation for the TI80404 https://github.com/sphCow/DAC81404_lib
  *   
  *   Used to find multiple DAC ICs on SPI Bus by using CS pin
+ *   
 **/
 
 #include <Arduino.h>
@@ -64,7 +65,7 @@ void setup() {
     DAC81416 dac(DAC_CS_ARRAY[i], DAC_RST, -1, &SPI, 30000000);
 
     // Init the DAC
-    uint16_t DAC_INIT = dac.init(DAC81416::U_5);
+    uint16_t DAC_INIT = dac.init(CRC_DISABLE, DAC81416::U_5);
 
     // Start populating the result
     DAC_ARRAY[i].CS = DAC_CS_ARRAY[i];

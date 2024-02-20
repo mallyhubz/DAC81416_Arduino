@@ -7,13 +7,6 @@
  *   
 **/
 
-/*
-Working notes 
- 
-When the LDAC pin is low, the DAC outputs of those channels
-configured in synchronous mode are updated simultaneously. Connect to VIO if unused.
-*/
-
 #include <Arduino.h>
 #include "dac81416.h"
 
@@ -31,12 +24,15 @@ configured in synchronous mode are updated simultaneously. Connect to VIO if unu
 // Declare DAC. For non-chained-mode, use a CS pin per DAC
 DAC81416 dac(DAC_CS, DAC_RST, DAC_LDAC, &SPI, 30000000);
 
-void setup() {  
+void setup() {
 
-  // Initialise DAC
-  uint16_t DAC_INIT = dac.init(DAC81416::U_5);
-  
-  // 2.5V reference
+  if (DEBUG_FLAG){Serial.begin(115200);}; 
+
+  // Initialise DAC only Non-CRC mode supported
+  uint16_t DAC_INIT = dac.init(0, DAC81416::U_5);
+  Serial.println(dac.get_deviceid(),HEX);  
+    
+  // 2.5V internal reference
   dac.set_int_reference(false);
 
   // Set range, U = Unipolar, B = Bipolar; 5, 10, 20, 40, 2V5
@@ -51,7 +47,6 @@ void setup() {
 
   if(DEBUG_FLAG)
   {
-    Serial.begin(115200);
     
     Serial.println("DAC Init...");
     if(dac.is_alive())
@@ -101,6 +96,23 @@ void setup() {
      {
         Serial.println("DAC is not responding");    
      }
+
+      //Set all DAC channels to ASYNC
+      //for (int i=0; i<=15; i++)
+      //{
+        //dac.set_sync(i,DAC81416::ASYNC);
+      //}      
+
+     //Serial.println("Setting ch14 to Tog1");
+     //dac.set_ch_togglemode(14, DAC81416::TOGGLE1);
+     //delay(1000);     
+     //Serial.println(dac.get_ch_togglemode(14),BIN);
+
+     //Serial.println("Setting ch14 to NoTog");
+     //dac.set_ch_togglemode(14, DAC81416::NOTOGGLE);
+     //delay(1000);
+     //Serial.println(dac.get_ch_togglemode(14),BIN);
+     
   }
 } //SETUP
 
@@ -124,8 +136,8 @@ void loop() {
     
     if(DEBUG_FLAG)
     {
-        Serial.print("Status REGISTER = ");
-        Serial.println(read_status,HEX);
+        //Serial.print("Status REGISTER = ");
+        //Serial.println(read_status,HEX);
     }
 
     // Check each STATUS bit

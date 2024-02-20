@@ -40,15 +40,27 @@
 #define  R_DAC15      0x1F
 
 // SPICONFIG 	Table 8-12
-#define TEMPALM_EN(x) (x << 11)
-#define DACBUSY_EN(x) (x << 10)
-#define CRCALM_EN(x)  (x << 9)
-#define SFTTOG_EN(x)  (x << 6)
-#define DEV_PWDWN(x)  (x << 5)
-#define CRC_EN(x)     (x << 4)
-#define STR_EN(x)     (x << 3)
-#define SDO_EN(x)     (x << 2)
-#define FSDO(x)       (x << 1)
+#define TEMPALM_EN(x)  (x << 11)
+#define DACBUSY_EN(x)  (x << 10)
+#define CRCALM_EN(x)   (x << 9)
+#define SFTTOG_EN(x)   (x << 6)
+#define DEV_PWDWN(x)   (x << 5)
+#define CRC_EN(x)      (x << 4)
+#define STR_EN(x)      (x << 3)
+#define SDO_EN(x)      (x << 2)
+#define FSDO(x)        (x << 1)
+
+#define TRIGGER_ALMRST	 0x08
+#define TRIGGER_AB-TOG2  0x07
+#define TRIGGER_AB-TOG1  0x06
+#define TRIGGER_AB-TOG0  0x05
+#define TRIGGER_LDAC     0x04
+
+#define DEVICE_DEFAULTS_CODE	0xA
+
+// CRC MODES
+#define CRC_DISABLE		0
+#define CRC_ENABLE		1
 
 // DAC READ MASK
 #define RREG 0xC0
@@ -66,7 +78,9 @@ class DAC81416 {
         // pins
         int _cs_pin;
         int _rst_pin;
-        int _ldac_pin;
+        int _ldac_pin;	
+		
+		bool _crc_en;
 
         inline void cs_on();
         inline void cs_off();
@@ -79,7 +93,15 @@ class DAC81416 {
 
         // SPI functions
         void write_reg(uint8_t reg, uint16_t wdata);
-        uint16_t read_reg(uint8_t reg);
+		void write_reg_crc(uint8_t reg, uint16_t wdata);
+        uint16_t read_reg(uint8_t reg);  //pass this crc_en, instead of a seperate function ?
+				
+		
+		//CRC-8 0x07 calculator
+		inline uint8_t calculateCRC(uint8_t* data, uint8_t length);
+		
+		// SPI with CRC
+		uint16_t read_reg_crc(uint8_t reg);
 
         // DACRANGE is a write only register
         // Have to keep track of individual channel ranges manually
@@ -87,8 +109,10 @@ class DAC81416 {
 
     public:
     
+		void fix();
+	
         // Output Voltage ENUM
-        enum ChannelRange {
+        enum ChannelRange {				   
 				   U_5  = 0b0000,   // Unipolar  0V to 5V
                    U_10 = 0b0001,   // Unipolar  0V to 10V
                    U_20 = 0b0010,   // Unipolar  0V to 20V
@@ -97,6 +121,12 @@ class DAC81416 {
                    B_10 = 0b1010,   // Bipolar   -10V to +10V
                    B_20 = 0b1100,   // Bipolar   -20V to +20V
 				   B_2V5 = 0b1110}; // Bipolar   -2.5V to +2.5V
+
+        enum ToggleMode {				   
+				   NOTOGGLE = 0b00,   // Disabled
+				   TOGGLE0  = 0b01,   // Toggle input 0
+                   TOGGLE1  = 0b10,   // Toggle input 1
+				   TOGGLE2  = 0b11};  // Toggle input 2
 
 		// 2 Types of temporal operation
 		// SYNC means that channel will use LDAC LOW to trigger
@@ -113,20 +143,29 @@ class DAC81416 {
         bool get_ch_LDAC_enabled(int ch);
 
         // Default CONFIG
-		uint16_t SPICONFIG = TEMPALM_EN(1) | DACBUSY_EN(0) | CRCALM_EN(1) | (0 << 8) | (1 << 7) | SFTTOG_EN(0) | DEV_PWDWN(0) | CRC_EN(0) | STR_EN(0) | SDO_EN(1) | FSDO(1) | 0 << 1;
+		uint16_t     SPICONFIG = TEMPALM_EN(1) | DACBUSY_EN(0) | CRCALM_EN(0) | (0 << 8) | (1 << 7) | SFTTOG_EN(0) | DEV_PWDWN(0) | CRC_EN(0) | STR_EN(0) | SDO_EN(1) | FSDO(1) | 0 << 1;
+
+		// CONFIG with CRC
+		uint16_t CRC_SPICONFIG = TEMPALM_EN(1) | DACBUSY_EN(0) | CRCALM_EN(1) | (0 << 8) | (1 << 7) | SFTTOG_EN(0) | DEV_PWDWN(0) | CRC_EN(1) | STR_EN(0) | SDO_EN(1) | FSDO(1) | 0 << 1;
 
         // DAC Constructor
         DAC81416(int cspin, int rstpin = -1, int ldacpin = -1,
                  SPIClass *spi = &SPI, uint32_t spi_clock_hz=8000000);
 
         // Init function to setup the DAC
-        int init(ChannelRange default_channelrange);
+        int init(bool CRC, ChannelRange default_channelrange);
 
-        // Set DAC channel powerdown
-        void set_ch_enabled(int ch, bool state); // true/false = power ON/OFF
-
+        // Set DAC channel power state
+        void set_ch_enabled(int ch, bool state);
+				
         // Get DAC channel power state
         bool get_ch_enabled(int ch);
+
+		// Set DAC channel broadcast state
+        void set_ch_broadcast(int ch, bool state);
+		
+		// Get DAC channel broadcast state
+        bool get_ch_broadcast(int ch);
 
         // Set Enable Internal 2.5V Reference
         void set_int_reference(bool state);
@@ -142,9 +181,30 @@ class DAC81416 {
 
         // Write 16-bit output value
         void set_out(int ch, uint16_t val);
+		
+		// Write 16-bit output value
+        void set_out_broadcast(uint16_t val);
 
         // Set Sync 
         void set_sync(int ch, SyncMode);
+
+		// Set DAC Channel Toggle Config
+        void set_ch_togglemode(int ch, ToggleMode);
+		
+		// Set DAC Channel Toggle Config
+        int get_ch_togglemode(int ch);
+
+		// Trigger a specific toggle
+		void trigger_toggle(ToggleMode);		
+		
+		// Trigger factory defaults
+		void defaults();
+		
+		// Trigger LDAC
+		void trigger_ldac();
+		
+		// Trigger Alarm RESET
+		void trigger_alarm_reset();
 
         // Check Alive using R_DEVICEID
     	bool is_alive();
