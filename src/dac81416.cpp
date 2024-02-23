@@ -340,7 +340,7 @@ void DAC81416::set_range(int ch, ChannelRange range) {
 	int reg = ch / 4;
 	
 	// REGISTER address to be stored in here
-	int DAC_REGISTER = R_DACRANGE4 - reg;
+	int DAC_REGISTER = R_DACRANGE3 - reg;
 	
 	// From original library - Calculate the bits needed to configure register
     uint16_t mask = (0xffff >> (16-4)) << 4*ch;
